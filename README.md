@@ -49,6 +49,10 @@ The app will be available at [http://localhost:3000](http://localhost:3000)
 4. Click "Generate Subtitle".
 5. Download or preview the generated subtitles.
 
+## Screenshot
+
+![UI Screenshot](screenshot.png)
+
 ## Notes
 - Python 3.12+ is required for backend scripts.
 - If YouTube does not provide a transcript, the app will automatically download audio and use Whisper for transcription (requires more compute and time).
