@@ -43,23 +43,28 @@ export default function SubtitleGenerator() {
 
     try {
       setIsProcessing(true)
-      setSubtitleData(null)
+      setSubtitleData(null);
 
-      const result = await processYoutubeVideo(youtubeUrl, targetLanguage)
+      const res = await fetch("/api/subtitle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: youtubeUrl, targetLanguage }),
+      });
+      const result = await res.json();
 
-      if (result.success) {
-        setSubtitleData(result.subtitles)
-        setVideoTitle(result.title)
+      if (res.ok && result.subtitles) {
+        setSubtitleData(result.subtitles);
+        setVideoTitle(result.title);
         toast({
           title: "字幕生成成功",
           description: "您現在可以下載字幕檔案",
-        })
+        });
       } else {
         toast({
           title: "處理失敗",
           description: result.error || "無法處理此 YouTube 影片",
           variant: "destructive",
-        })
+        });
       }
     } catch (error) {
       toast({
