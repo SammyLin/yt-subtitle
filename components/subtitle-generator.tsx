@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { processYoutubeVideo } from "@/app/actions"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Download } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 
-const languages = [
+// 預設語言清單（尚未取得時使用）
+const defaultLanguages = [
   { value: "zh-TW", label: "繁體中文" },
   { value: "zh-CN", label: "簡體中文" },
   { value: "en", label: "英文" },
@@ -29,6 +30,51 @@ export default function SubtitleGenerator() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [subtitleData, setSubtitleData] = useState<string | null>(null)
   const [videoTitle, setVideoTitle] = useState<string | null>(null)
+
+  // 新增影片預覽與語言狀態
+  const [videoInfo, setVideoInfo] = useState<{title?: string, thumbnail?: string}|null>(null)
+  const [availableLanguages, setAvailableLanguages] = useState<typeof defaultLanguages|null>(null)
+  const [isFetchingLanguages, setIsFetchingLanguages] = useState(false)
+
+  // 監聽 youtubeUrl，自動取得影片資訊與語言
+  useEffect(() => {
+    if (!youtubeUrl) {
+      setVideoInfo(null)
+      setAvailableLanguages(null)
+      return
+    }
+    // 取得影片預覽
+    const videoIdMatch = youtubeUrl.match(/[?&]v=([\w-]+)/)
+    if (videoIdMatch) {
+      const videoId = videoIdMatch[1]
+      setVideoInfo({
+        thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+      })
+    } else {
+      setVideoInfo(null)
+    }
+    // 取得可用語言
+    setIsFetchingLanguages(true)
+    fetch("/api/youtube-languages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: youtubeUrl }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.languages && Array.isArray(data.languages)) {
+          setAvailableLanguages(data.languages)
+          // 若預設語言不在新語言清單，重設
+          if (!data.languages.some((l:any) => l.value === targetLanguage)) {
+            setTargetLanguage(data.languages[0]?.value || "")
+          }
+        } else {
+          setAvailableLanguages(null)
+        }
+      })
+      .catch(() => setAvailableLanguages(null))
+      .finally(() => setIsFetchingLanguages(false))
+  }, [youtubeUrl])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -109,13 +155,22 @@ export default function SubtitleGenerator() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="target-language">目標語言</Label>
-            <Select value={targetLanguage} onValueChange={setTargetLanguage} disabled={isProcessing}>
+            <Label htmlFor="target-language">
+              目標語言
+              {youtubeUrl && isFetchingLanguages && (
+                <span className="ml-2 text-xs text-muted-foreground">(需耗時產生)</span>
+              )}
+            </Label>
+            <Select
+              value={targetLanguage}
+              onValueChange={setTargetLanguage}
+              disabled={isProcessing || isFetchingLanguages || !youtubeUrl}
+            >
               <SelectTrigger id="target-language">
                 <SelectValue placeholder="選擇語言" />
               </SelectTrigger>
               <SelectContent>
-                {languages.map((lang) => (
+                {(availableLanguages || defaultLanguages).map((lang) => (
                   <SelectItem key={lang.value} value={lang.value}>
                     {lang.label}
                   </SelectItem>
@@ -145,6 +200,20 @@ export default function SubtitleGenerator() {
           </div>
         </form>
 
+        {/* 影片預覽 */}
+        {videoInfo && (
+          <div className="mt-6 flex items-center space-x-4">
+            {videoInfo.thumbnail && (
+              <img src={videoInfo.thumbnail} alt="影片縮圖" className="w-32 h-20 rounded object-cover border" />
+            )}
+            <div>
+              <Label>影片預覽</Label>
+              <div className="text-sm text-muted-foreground max-w-xs truncate">
+                {videoTitle || videoInfo.title || "(標題將於生成字幕時顯示)"}
+              </div>
+            </div>
+          </div>
+        )}
         {subtitleData && (
           <div className="mt-6">
             <Label>預覽字幕</Label>
