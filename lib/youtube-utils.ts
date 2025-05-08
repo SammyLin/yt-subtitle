@@ -5,19 +5,64 @@ export function extractVideoId(url: string): string | null {
   return match && match[7].length === 11 ? match[7] : null
 }
 
-// 獲取影片資訊
+// YouTube 語言對照表（可擴充）
+const YT_LANGUAGE_LABELS: Record<string, string> = {
+  'zh-Hant': '繁體中文',
+  'zh-Hans': '簡體中文',
+  'en': '英文',
+};
+
+// 獲取影片資訊與字幕語言
 export async function fetchVideoInfo(videoId: string) {
   try {
-    // 在實際應用中，這裡應該調用 YouTube API 獲取影片資訊
-    // 這裡為了示範，返回模擬數據
-    return {
-      title: `YouTube Video ${videoId}`,
-      duration: "10:00",
-      author: "YouTube Creator",
+    const res = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36'
+      }
+    });
+    const html = await res.text();
+    console.log('HTML length:', html.length);
+    console.log('First 500 chars:', html.slice(0, 500));
+    // 解析 <title> ... </title>
+    const match = html.match(/<title>([^<]*)<\/title>/i);
+    let title = match ? match[1] : '';
+    title = title.replace(' - YouTube', '').trim();
+
+    // 解析 player_response 裡的 captionTracks
+    let languages: { value: string, label: string }[] = [];
+    const playerResponseMatch = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\});/);
+    console.log('playerResponseMatch:', playerResponseMatch ? '[found]' : '[not found]');
+    if (playerResponseMatch) {
+      console.log('playerResponseMatch length:', playerResponseMatch[1].length);
+      console.log('First 500:', playerResponseMatch[1].slice(0, 500));
+      console.log('Last 500:', playerResponseMatch[1].slice(-500));
     }
+    if (playerResponseMatch) {
+      try {
+        const playerResponse = JSON.parse(playerResponseMatch[1]);
+        // 新增 log
+        console.log('playerResponse.captions:', playerResponse.captions);
+        if (playerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks) {
+          console.log('captionTracks:', playerResponse.captions.playerCaptionsTracklistRenderer.captionTracks);
+        }
+        // 僅取 captionTracks，確保只顯示實際有字幕的語言
+        const captionTracks = playerResponse.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+        if (Array.isArray(captionTracks)) {
+          languages = captionTracks.map((track: any) => {
+            const value = track.languageCode;
+            // 嘗試用 name.simpleText, 否則用對照表
+            const label = track.name?.simpleText || YT_LANGUAGE_LABELS[value] || value;
+            return { value, label };
+          });
+        }
+      } catch (e) {
+        // JSON parse 失敗忽略
+      }
+    }
+    return { title, languages };
   } catch (error) {
-    console.error("獲取影片資訊失敗:", error)
-    return null
+    console.error('獲取影片資訊失敗:', error);
+    return { title: '', languages: [] };
   }
 }
 

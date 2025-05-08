@@ -1,3 +1,6 @@
+# Commit Message Rules
+- All git commit messages should be written in English.
+
 # Core System Components
 - The main application logic is in src/core.
 - Shared utilities and helpers are in src/utils.

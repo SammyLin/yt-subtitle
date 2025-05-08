@@ -36,14 +36,14 @@ export default function SubtitleGenerator() {
   const [availableLanguages, setAvailableLanguages] = useState<typeof defaultLanguages|null>(null)
   const [isFetchingLanguages, setIsFetchingLanguages] = useState(false)
 
-  // 監聽 youtubeUrl，自動取得影片資訊與語言
+  // 貼上連結時即時取得影片縮圖、標題與語言
   useEffect(() => {
     if (!youtubeUrl) {
       setVideoInfo(null)
+      setVideoTitle(null)
       setAvailableLanguages(null)
       return
     }
-    // 取得影片預覽
     const videoIdMatch = youtubeUrl.match(/[?&]v=([\w-]+)/)
     if (videoIdMatch) {
       const videoId = videoIdMatch[1]
@@ -53,18 +53,19 @@ export default function SubtitleGenerator() {
     } else {
       setVideoInfo(null)
     }
-    // 取得可用語言
+    // 取得標題與語言
     setIsFetchingLanguages(true)
-    fetch("/api/youtube-languages", {
+    fetch("/api/youtube-info", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: youtubeUrl }),
     })
       .then(res => res.json())
       .then(data => {
+        if (data.title) setVideoTitle(data.title)
         if (data.languages && Array.isArray(data.languages)) {
           setAvailableLanguages(data.languages)
-          // 若預設語言不在新語言清單，重設
+          // 若目前語言不在新語言清單，重設
           if (!data.languages.some((l:any) => l.value === targetLanguage)) {
             setTargetLanguage(data.languages[0]?.value || "")
           }
@@ -72,7 +73,9 @@ export default function SubtitleGenerator() {
           setAvailableLanguages(null)
         }
       })
-      .catch(() => setAvailableLanguages(null))
+      .catch(() => {
+        setAvailableLanguages(null)
+      })
       .finally(() => setIsFetchingLanguages(false))
   }, [youtubeUrl])
 
@@ -101,6 +104,14 @@ export default function SubtitleGenerator() {
       if (res.ok && result.subtitles) {
         setSubtitleData(result.subtitles);
         setVideoTitle(result.title);
+        // 從回傳取得語言清單（如果有）
+        if (result.languages && Array.isArray(result.languages)) {
+          setAvailableLanguages(result.languages);
+          // 若目前語言不在清單中，自動選第一個
+          if (!result.languages.some((l:any) => l.value === targetLanguage)) {
+            setTargetLanguage(result.languages[0]?.value || "");
+          }
+        }
         toast({
           title: "字幕生成成功",
           description: "您現在可以下載字幕檔案",
@@ -154,30 +165,39 @@ export default function SubtitleGenerator() {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="target-language">
-              目標語言
-              {youtubeUrl && isFetchingLanguages && (
+          {Array.isArray(availableLanguages) && availableLanguages.length > 0 ? (
+            <div className="space-y-2">
+              <Label htmlFor="target-language">
+                目標語言
+                {isFetchingLanguages && (
+                  <span className="ml-2 text-xs text-muted-foreground">(需耗時產生)</span>
+                )}
+              </Label>
+              <Select
+                value={targetLanguage}
+                onValueChange={setTargetLanguage}
+                disabled={isProcessing || isFetchingLanguages}
+              >
+                <SelectTrigger id="target-language">
+                  <SelectValue placeholder="選擇語言" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableLanguages.map((lang) => (
+                    <SelectItem key={lang.value} value={lang.value}>
+                      {lang.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : isFetchingLanguages && (
+            <div className="space-y-2">
+              <Label htmlFor="target-language">
+                目標語言
                 <span className="ml-2 text-xs text-muted-foreground">(需耗時產生)</span>
-              )}
-            </Label>
-            <Select
-              value={targetLanguage}
-              onValueChange={setTargetLanguage}
-              disabled={isProcessing || isFetchingLanguages || !youtubeUrl}
-            >
-              <SelectTrigger id="target-language">
-                <SelectValue placeholder="選擇語言" />
-              </SelectTrigger>
-              <SelectContent>
-                {(availableLanguages || defaultLanguages).map((lang) => (
-                  <SelectItem key={lang.value} value={lang.value}>
-                    {lang.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              </Label>
+            </div>
+          )}
 
           <div className="flex justify-between items-center pt-2">
             <Button type="submit" disabled={isProcessing}>
@@ -209,7 +229,7 @@ export default function SubtitleGenerator() {
             <div>
               <Label>影片預覽</Label>
               <div className="text-sm text-muted-foreground max-w-xs truncate">
-                {videoTitle || videoInfo.title || "(標題將於生成字幕時顯示)"}
+                {videoTitle || "(標題將於生成字幕時顯示)"}
               </div>
             </div>
           </div>
